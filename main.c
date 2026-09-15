@@ -14,7 +14,6 @@
 
 #define ADC_SPI_PIPE "/dev/spidev4.0"
 #define SPI_SPEED_HZ (10000000U)
-#define TX_BASE_CMD_LEN (2)
 #define MAX_TRANSACTION_LEN_BYTES 8
 
 typedef enum {
