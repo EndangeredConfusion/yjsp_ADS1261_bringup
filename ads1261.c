@@ -3,8 +3,9 @@
 #define SHIFT_LEFT_ONE_BYTE(bits) (bits << 8)
 #define SHIFT_LEFT_TWO_BYTE(bits) (bits << 16)
 
+#define TWO_POW_23 (8388608)
 
-ads1261_error_code_t ads1261_read_reg(ads1261_phyx_transact_ptr * spi_dev, uint8_t reg, uint8_t * value, spi_transaction_record_t * const trans) {
+ads1261_error_code_t ads1261_read_reg(ads1261_phyx_transact_ptr spi_dev, uint8_t reg, uint8_t * value, ads1261_spi_transaction_record_t * const trans) {
     enum { MESSAGE_LENGTH = 3 };
     _Static_assert(
         MESSAGE_LENGTH <= MAX_TRANSACTION_LEN_BYTES,
@@ -25,7 +26,7 @@ ads1261_error_code_t ads1261_read_reg(ads1261_phyx_transact_ptr * spi_dev, uint8
     return GOOD;
 }
 
-ads1261_error_code_t ads1261_write_reg(ads1261_phyx_transact_ptr * spi_dev, uint8_t reg, uint8_t value, spi_transaction_record_t * trans) {
+ads1261_error_code_t ads1261_write_reg(ads1261_phyx_transact_ptr spi_dev, uint8_t reg, uint8_t value, ads1261_spi_transaction_record_t * trans) {
     enum { MESSAGE_LENGTH = 2 };
     _Static_assert(
         MESSAGE_LENGTH <= MAX_TRANSACTION_LEN_BYTES,
@@ -113,4 +114,17 @@ ads1261_error_code_t ads1261_cmd_stop(ads1261_phyx_transact_ptr spi_dev, ads1261
     return GOOD;
 }
 
+static inline int32_t ads1261_sign_extend_raw_data_read(uint32_t raw_data) {
+    raw_data &= 0x00FFFFFF;
+    // 24 bit raw data -> bit 23 is the sign bit
+    if (raw_data & (0b1 << 23)) {
+        // sign extend (make all the new bits high)
+        raw_data |= (0xFF000000);
+    }
+    return (int32_t)raw_data;
+}
 
+double ads1261_decode_voltage(uint32_t raw_data, double vref, double gain) {
+    int32_t signed_value = ads1261_sign_extend_raw_data_read(raw_data);
+    return ((double)signed_value / (TWO_POW_23)) * (vref / gain);
+}

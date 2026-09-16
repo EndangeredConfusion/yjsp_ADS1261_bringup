@@ -76,11 +76,11 @@ int main(void) {
 
     printf("\nSet device (MODE 0) to SR 40k, Filter: FIR:\n");
     ads1261_spi_transaction_record_t mode0_write_record;
-#define MODE0_40_000_SR_VAL (11111)
+#define MODE0_40_000_SR_VAL (0b11111)
 #define MODE0_14400_SR_OFFSET (3)
-#define MODE0_FIR_VAL (100)
+#define MODE0_FIR_VAL (0b100)
 #define MODE0_FIR_OFFSET (0)
-#define MODE0_TEST_VAL (MODE0_40_000_SR_VAL<<MODE0_14400_SR_OFFSET) || (MODE0_FIR_VAL<<MODE0_FIR_OFFSET)
+#define MODE0_TEST_VAL (MODE0_40_000_SR_VAL<<MODE0_14400_SR_OFFSET) | (MODE0_FIR_VAL<<MODE0_FIR_OFFSET)
     ads1261_write_reg(&ads1261_device_0_spi_transfer, ADS1261_REG_MODE0, MODE0_TEST_VAL, &mode0_write_record);
     print_ads1261_spi_transaction(&mode0_write_record);
 
@@ -97,7 +97,6 @@ int main(void) {
     ads1261_read_reg(ads1261_device_0_spi_transfer, ADS1261_REG_STATUS, &read_sr_val, &read_sr_record);
     print_ads1261_spi_transaction(&read_sr_record);
 
-    ads1261_spi_transaction_record_t read_sr_record;
     return 0;
 }
 

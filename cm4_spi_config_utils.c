@@ -1,5 +1,7 @@
 #include "cm4_spi_config_utils.h"
 #include <sys/ioctl.h>
+#include <linux/spi/spidev.h>
+
 
 int set_spi_mode(int fd, uint8_t * mode_ptr) {
     return ioctl(fd, SPI_IOC_WR_MODE, mode_ptr);

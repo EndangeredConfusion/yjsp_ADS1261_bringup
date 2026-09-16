@@ -5,6 +5,6 @@ set(CMAKE_C_STANDARD 17)
 
 add_executable(yjsp_ads126_eval
         main.c
-        adc_commands.h
-        cm4_spi_config_utils.h
-        cm4_spi_config_utils.c)
+        cm4_spi_config_utils.c
+        ads1261.c
+)
