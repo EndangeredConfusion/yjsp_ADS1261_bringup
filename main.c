@@ -1,18 +1,13 @@
-#include <errno.h>
 #include <fcntl.h>
 #include <linux/spi/spidev.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/ioctl.h>
-#include <unistd.h>
 #include <linux/types.h>
-#include <stdbool.h>
 
 #include "ads1261.h"
 #include "cm4_spi_config_utils.h"
-
 
 #define ADC_SPI_PIPE "/dev/spidev4.0"
 #define SPI_SPEED_HZ (10000000U)
@@ -21,7 +16,7 @@
 static int ADS1261_SPI_DEV_4_DEVICE_0_FD;
 ads1261_error_code_t ads1261_device_0_spi_transfer(ads1261_spi_transaction_record_t * const trans);
 
-int base_spi_transfer(int fd, const uint8_t *tx, uint8_t *rx, size_t len);
+ads1261_error_code_t base_spi_transfer(int fd, ads1261_spi_transaction_record_t * const trans);
 
 ads1261_error_code_t print_ads1261_spi_transaction(const ads1261_spi_transaction_record_t * trans);
 
@@ -79,17 +74,21 @@ int main(void) {
     ads1261_write_reg(ads1261_device_0_spi_transfer, ADS1261_REG_REF, REF_INTERNAL_2_5V, &ref_write_record);
     print_ads1261_spi_transaction(&ref_write_record);
 
-
-    printf("\nSet device to SR 14400, Filter: FIR:\n");
+    printf("\nSet device (MODE 0) to SR 40k, Filter: FIR:\n");
     ads1261_spi_transaction_record_t mode0_write_record;
-#define MODE0_14400_SR_VAL (01101)
+#define MODE0_40_000_SR_VAL (11111)
 #define MODE0_14400_SR_OFFSET (3)
 #define MODE0_FIR_VAL (100)
 #define MODE0_FIR_OFFSET (0)
-#define MODE0_TEST_VAL (MODE0_14400_SR_VAL<<MODE0_14400_SR_OFFSET) || (MODE0_FIR_VAL<<MODE0_FIR_OFFSET)
+#define MODE0_TEST_VAL (MODE0_40_000_SR_VAL<<MODE0_14400_SR_OFFSET) || (MODE0_FIR_VAL<<MODE0_FIR_OFFSET)
     ads1261_write_reg(&ads1261_device_0_spi_transfer, ADS1261_REG_MODE0, MODE0_TEST_VAL, &mode0_write_record);
     print_ads1261_spi_transaction(&mode0_write_record);
 
+    printf("\nSet device (MODE 1) to 50us conversion start delay:\n");
+    ads1261_spi_transaction_record_t mode1_write_record;
+#define MODE1_VAL_50US (0001)
+    ads1261_write_reg(&ads1261_device_0_spi_transfer, ADS1261_REG_MODE1, MODE1_VAL_50US, &mode1_write_record);
+    print_ads1261_spi_transaction(&mode1_write_record);
 
     printf("\nRead device SR:\n");
 #define IS_SR_READY(SR) (SR & (0b1 << 2))
@@ -98,6 +97,7 @@ int main(void) {
     ads1261_read_reg(ads1261_device_0_spi_transfer, ADS1261_REG_STATUS, &read_sr_val, &read_sr_record);
     print_ads1261_spi_transaction(&read_sr_record);
 
+    ads1261_spi_transaction_record_t read_sr_record;
     return 0;
 }
 

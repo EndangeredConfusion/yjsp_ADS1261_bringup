@@ -88,4 +88,10 @@ ads1261_error_code_t ads1261_read_reg(ads1261_phyx_transact_ptr spi_dev, uint8_t
 
 ads1261_error_code_t ads1261_write_reg(ads1261_phyx_transact_ptr spi_dev, uint8_t reg, uint8_t value, ads1261_spi_transaction_record_t * trans);
 
+ads1261_error_code_t ads1261_read_cmd_read_data(ads1261_phyx_transact_ptr spi_dev, uint32_t * raw_val, ads1261_spi_transaction_record_t * trans);
+
+ads1261_error_code_t ads1261_cmd_start(ads1261_phyx_transact_ptr spi_dev, ads1261_spi_transaction_record_t * trans);
+
+ads1261_error_code_t ads1261_cmd_stop(ads1261_phyx_transact_ptr spi_dev, ads1261_spi_transaction_record_t * trans);
+
 #endif //ADS1261_H
