@@ -1,9 +1,9 @@
-#ifndef YJSP_ADS126_EVAL_ADC_COMMANDS_H
-#define YJSP_ADS126_EVAL_ADC_COMMANDS_H
+#ifndef ADS1261_H
+#define ADS1261_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
-// First byte commands:
 #define NOP 0x00
 #define RESET 0x06
 #define START 0x08
@@ -46,7 +46,6 @@ typedef enum {
 #define CMD_WRITE_REG(reg) (WREG | (reg & 0x1F))
 #define CMD_READ_REG(reg) (RREG | (reg & 0x1F))
 
-
 typedef enum {
     ADS1261_AINCOM  = 0x0,
     ADS1261_AIN0    = 0x1,
@@ -73,7 +72,6 @@ typedef enum {
     MSG_BOUNDS_ERROR = 3
 } ads1261_error_code_t;
 
-
 #define MAX_TRANSACTION_LEN_BYTES 8
 
 typedef struct {
@@ -82,12 +80,12 @@ typedef struct {
     uint8_t len;
 } ads1261_spi_transaction_record_t;
 
-
+typedef ads1261_error_code_t (*ads1261_phyx_transact_ptr) (ads1261_spi_transaction_record_t * trans);
 
 bool get_input_mux(ads1261_input_mux_t pos, ads1261_input_mux_t neg, uint8_t * res);
-ads1261_error_code_t ads1261_read_reg(int fd, uint8_t reg, uint8_t * value, spi_transaction_record_t * trans);
-ads1261_error_code_t ads1261_write_reg(int fd, uint8_t reg, uint8_t value, spi_transaction_record_t * trans);
-ads1261_error_code_t print_ads1261_spi_transaction(const spi_transaction_record_t * trans);
 
+ads1261_error_code_t ads1261_read_reg(ads1261_phyx_transact_ptr spi_dev, uint8_t reg, uint8_t * value, ads1261_spi_transaction_record_t * trans);
 
-#endif //YJSP_ADS126_EVAL_ADC_COMMANDS_H
+ads1261_error_code_t ads1261_write_reg(ads1261_phyx_transact_ptr spi_dev, uint8_t reg, uint8_t value, ads1261_spi_transaction_record_t * trans);
+
+#endif //ADS1261_H
