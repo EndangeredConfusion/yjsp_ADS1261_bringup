@@ -40,10 +40,15 @@ int main(void) {
         perror("Failed to set SPI max speed");
     }
 
+    printf("Reset device to clear registers:\n");
+    ads1261_spi_transaction_record_t reset_device_transaction_record;
+    ads1261_cmd_reset(ads1261_device_0_spi_transfer, &reset_device_transaction_record);
+    print_ads1261_spi_transaction(&reset_device_transaction_record);
+
+    printf("\nRead device ID:\n");
     ads1261_spi_transaction_record_t read_device_id_transaction_record;
     uint8_t id_reg_val;
     ads1261_read_reg(ads1261_device_0_spi_transfer, ADS1261_REG_ID, &id_reg_val, &read_device_id_transaction_record);
-    printf("Read device ID:\n");
     print_ads1261_spi_transaction(&read_device_id_transaction_record);
 
     // turn vlven1 on (GPIO24) (output is 24V), with off output is ~4.3V
@@ -94,6 +99,15 @@ int main(void) {
 #define IS_SR_READY(SR) (SR & (0b1 << 2))
     ads1261_spi_transaction_record_t read_sr_record;
     uint8_t read_sr_val;
+    ads1261_read_reg(ads1261_device_0_spi_transfer, ADS1261_REG_STATUS, &read_sr_val, &read_sr_record);
+    print_ads1261_spi_transaction(&read_sr_record);
+
+    printf("\nReset the was reset bit in SR:\n");
+    const uint8_t RESET_SR_BITS = 0x00;
+    ads1261_write_reg(ads1261_device_0_spi_transfer, ADS1261_REG_STATUS, RESET_SR_BITS, &read_sr_record);
+    print_ads1261_spi_transaction(&read_sr_record);
+
+    printf("\nRead device SR again:\n");
     ads1261_read_reg(ads1261_device_0_spi_transfer, ADS1261_REG_STATUS, &read_sr_val, &read_sr_record);
     print_ads1261_spi_transaction(&read_sr_record);
 

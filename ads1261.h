@@ -96,4 +96,6 @@ ads1261_error_code_t ads1261_cmd_stop(ads1261_phyx_transact_ptr spi_dev, ads1261
 
 double ads1261_decode_voltage(uint32_t raw_data, double vref, double gain);
 
+ads1261_error_code_t ads1261_cmd_reset(ads1261_phyx_transact_ptr spi_dev, ads1261_spi_transaction_record_t * trans);
+
 #endif //ADS1261_H

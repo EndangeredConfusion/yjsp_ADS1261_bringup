@@ -80,7 +80,7 @@ ads1261_error_code_t ads1261_cmd_start(ads1261_phyx_transact_ptr spi_dev, ads126
     enum { MESSAGE_LENGTH = 2 };
     _Static_assert(
     MESSAGE_LENGTH <= MAX_TRANSACTION_LEN_BYTES,
-        "RDATA transaction exceeds transaction buffer"
+        "START cmd transaction exceeds transaction buffer"
     );
     trans->tx[0] = START;
     trans->tx[1] = 0;
@@ -99,7 +99,7 @@ ads1261_error_code_t ads1261_cmd_stop(ads1261_phyx_transact_ptr spi_dev, ads1261
     enum { MESSAGE_LENGTH = 2 };
     _Static_assert(
     MESSAGE_LENGTH <= MAX_TRANSACTION_LEN_BYTES,
-        "RDATA transaction exceeds transaction buffer"
+        "STOP cmd transaction exceeds transaction buffer"
     );
     trans->tx[0] = STOP;
     trans->tx[1] = 0;
@@ -127,4 +127,23 @@ static inline int32_t ads1261_sign_extend_raw_data_read(uint32_t raw_data) {
 double ads1261_decode_voltage(uint32_t raw_data, double vref, double gain) {
     int32_t signed_value = ads1261_sign_extend_raw_data_read(raw_data);
     return ((double)signed_value / (TWO_POW_23)) * (vref / gain);
+}
+
+ads1261_error_code_t ads1261_cmd_reset(ads1261_phyx_transact_ptr spi_dev, ads1261_spi_transaction_record_t * trans) {
+    enum { MESSAGE_LENGTH = 2 };
+    _Static_assert(
+    MESSAGE_LENGTH <= MAX_TRANSACTION_LEN_BYTES,
+        "RESET cmd transaction exceeds transaction buffer"
+    );
+    trans->tx[0] = RESET;
+    trans->tx[1] = 0;
+    trans->len = MESSAGE_LENGTH;
+    const int transfer_code = spi_dev(trans);
+    if (transfer_code != GOOD) {
+        return transfer_code;
+    }
+    if (trans->tx[0] != trans->rx[1]) {
+        return REFLECTION_ERROR;
+    }
+    return GOOD;
 }
