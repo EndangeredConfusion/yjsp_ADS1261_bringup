@@ -7,6 +7,7 @@
 #include <linux/types.h>
 #include <gpiod.h>
 #include <inttypes.h>
+#include <unistd.h>
 
 #include "ads1261.h"
 #include "cm4_spi_config_utils.h"
@@ -61,6 +62,7 @@ int main(void) {
     ADS1261_SPI_DEV_4_DEVICE_0_FD = open(ADC_SPI_PIPE, O_RDWR);
     if (ADS1261_SPI_DEV_4_DEVICE_0_FD < 0) {
         perror("Failed to open SPI pipe");
+        return 1;
     }
 
     uint8_t mode = SPI_MODE_1;
@@ -68,23 +70,33 @@ int main(void) {
     uint32_t max_speed_hz = SPI_SPEED_HZ;
     if (set_spi_mode(ADS1261_SPI_DEV_4_DEVICE_0_FD, &mode) < 0) {
         perror("Failed to set SPI mode");
+        return 1;
     }
     if (set_spi_bits_per_word(ADS1261_SPI_DEV_4_DEVICE_0_FD, &bits_per_word) < 0) {
         perror("Failed to set SPI bits per word");
+        return 1;
     }
     if (set_spi_max_speed_hz(ADS1261_SPI_DEV_4_DEVICE_0_FD, &max_speed_hz) < 0) {
         perror("Failed to set SPI max speed");
+        return 1;
     }
 
     printf("Reset device to clear registers:\n");
     ads1261_spi_transaction_record_t reset_device_transaction_record;
-    ads1261_cmd_reset(ads1261_device_0_spi_transfer, &reset_device_transaction_record);
+    if (ads1261_cmd_reset(ads1261_device_0_spi_transfer, &reset_device_transaction_record) != GOOD) {
+        perror("Failed to reset device");
+        return 1;
+    }
     print_ads1261_spi_transaction(&reset_device_transaction_record);
+    sleep(1);
 
     printf("\nRead device ID:\n");
     ads1261_spi_transaction_record_t read_device_id_transaction_record;
     uint8_t id_reg_val;
-    ads1261_read_reg(ads1261_device_0_spi_transfer, ADS1261_REG_ID, &id_reg_val, &read_device_id_transaction_record);
+    if (ads1261_read_reg(ads1261_device_0_spi_transfer, ADS1261_REG_ID, &id_reg_val, &read_device_id_transaction_record) != GOOD) {
+        perror("Failed to read device ID");
+        return 1;
+    }
     print_ads1261_spi_transaction(&read_device_id_transaction_record);
 
     // turn vlven1 on (GPIO24) (output is 24V), with off output is ~4.3V
@@ -99,20 +111,28 @@ int main(void) {
         perror("Invalid input mux config request.");
     }
     ads1261_spi_transaction_record_t mux_write_transaction_record;
-    ads1261_write_reg(ads1261_device_0_spi_transfer, ADS1261_REG_INPMUX, inpmux, &mux_write_transaction_record);
+    if (ads1261_write_reg(ads1261_device_0_spi_transfer, ADS1261_REG_INPMUX, inpmux, &mux_write_transaction_record) != GOOD) {
+        perror("Failed to write input mux config");
+        return 1;
+    };
     print_ads1261_spi_transaction(&mux_write_transaction_record);
 
     printf("\nSet device external gain to passthrough:\n");
-
     ads1261_spi_transaction_record_t pga_write_transaction_record;
 #define PGA_PASSTHROUGH_ON (0b1 << 7)
-    ads1261_write_reg(ads1261_device_0_spi_transfer, ADS1261_REG_PGA, PGA_PASSTHROUGH_ON, &pga_write_transaction_record);
+    if (ads1261_write_reg(ads1261_device_0_spi_transfer, ADS1261_REG_PGA, PGA_PASSTHROUGH_ON, &pga_write_transaction_record) != GOOD) {
+        perror("Failed to write pga config");
+        return 1;
+    }
     print_ads1261_spi_transaction(&pga_write_transaction_record);
 
     printf("\nSet device to use internal 2.5V reference:\n");
     ads1261_spi_transaction_record_t ref_write_record;
 #define REF_INTERNAL_2_5V (0b1 << 4)
-    ads1261_write_reg(ads1261_device_0_spi_transfer, ADS1261_REG_REF, REF_INTERNAL_2_5V, &ref_write_record);
+    if (ads1261_write_reg(ads1261_device_0_spi_transfer, ADS1261_REG_REF, REF_INTERNAL_2_5V, &ref_write_record) != GOOD) {
+        perror("Failed to write ref config");
+        return 1;
+    }
     print_ads1261_spi_transaction(&ref_write_record);
 
     printf("\nSet device (MODE 0) to SR 40k, Filter: FIR:\n");
@@ -122,29 +142,44 @@ int main(void) {
 #define MODE0_FIR_VAL (0b100)
 #define MODE0_FIR_OFFSET (0)
 #define MODE0_TEST_VAL (MODE0_40_000_SR_VAL<<MODE0_14400_SR_OFFSET) | (MODE0_FIR_VAL<<MODE0_FIR_OFFSET)
-    ads1261_write_reg(&ads1261_device_0_spi_transfer, ADS1261_REG_MODE0, MODE0_TEST_VAL, &mode0_write_record);
+    if (ads1261_write_reg(&ads1261_device_0_spi_transfer, ADS1261_REG_MODE0, MODE0_TEST_VAL, &mode0_write_record) != GOOD) {
+        perror("Failed to write mode0 config");
+        return 1;
+    }
     print_ads1261_spi_transaction(&mode0_write_record);
 
     printf("\nSet device (MODE 1) to 50us conversion start delay:\n");
     ads1261_spi_transaction_record_t mode1_write_record;
 #define MODE1_VAL_50US (0001)
-    ads1261_write_reg(&ads1261_device_0_spi_transfer, ADS1261_REG_MODE1, MODE1_VAL_50US, &mode1_write_record);
+    if (ads1261_write_reg(&ads1261_device_0_spi_transfer, ADS1261_REG_MODE1, MODE1_VAL_50US, &mode1_write_record) != GOOD) {
+        perror("Failed to write mode1 config");
+        return 1;
+    }
     print_ads1261_spi_transaction(&mode1_write_record);
 
     printf("\nRead device SR:\n");
 #define IS_SR_READY(SR) (SR & (0b1 << 2))
     ads1261_spi_transaction_record_t read_sr_record;
     uint8_t read_sr_val;
-    ads1261_read_reg(ads1261_device_0_spi_transfer, ADS1261_REG_STATUS, &read_sr_val, &read_sr_record);
+    if (ads1261_read_reg(ads1261_device_0_spi_transfer, ADS1261_REG_STATUS, &read_sr_val, &read_sr_record) != GOOD) {
+        perror("Failed to read sr config");
+        return 1;
+    }
     print_ads1261_spi_transaction(&read_sr_record);
 
     printf("\nReset the was reset bit in SR:\n");
     const uint8_t RESET_SR_BITS = 0x00;
-    ads1261_write_reg(ads1261_device_0_spi_transfer, ADS1261_REG_STATUS, RESET_SR_BITS, &read_sr_record);
+    if (ads1261_write_reg(ads1261_device_0_spi_transfer, ADS1261_REG_STATUS, RESET_SR_BITS, &read_sr_record) != GOOD) {
+        perror("Failed to write sr config");
+        return 1;
+    }
     print_ads1261_spi_transaction(&read_sr_record);
 
     printf("\nRead device SR again:\n");
-    ads1261_read_reg(ads1261_device_0_spi_transfer, ADS1261_REG_STATUS, &read_sr_val, &read_sr_record);
+    if (ads1261_read_reg(ads1261_device_0_spi_transfer, ADS1261_REG_STATUS, &read_sr_val, &read_sr_record) != GOOD) {
+        perror("Failed to read sr config");
+        return 1;
+    }
     print_ads1261_spi_transaction(&read_sr_record);
 
     struct gpiod_line_request *drdy = request_drdy();
@@ -187,14 +222,30 @@ int main(void) {
 
         samples[count++] = (sample_struct_t){timestamp_ns, seq, raw};
     };
-    FILE *out = stdout;
-    fprintf(out, "drdy_ns,edge_seq,raw\n");
-    for (size_t i = 0; i < count; ++i) {
-        fprintf(out, "%" PRIu64 ",%lu,%" PRIu32 "\n",
-                samples[i].timestamp_ns, samples[i].edge_seq, ads1261_decode_voltage(samples[i].val, 2.5, 1));
+    // FILE *out = stdout;
+    FILE * out = fopen("../output.csv", "w");
+    if (out == NULL) {
+        printf("Error: Could not open or create the file!\n");
+        return 1; // Exit the program with an error code
     }
-    return 0;
 
+    fprintf(out, "drdy_ns,edge_seq,voltage_V\n");
+    for (size_t i = 0; i < count; ++i) {
+        fprintf(out, "%" PRIu64 ",%lu,%.9f\n",
+                samples[i].timestamp_ns,
+                samples[i].edge_seq,
+                ads1261_decode_voltage(samples[i].val, 2.5, 1));
+    }
+
+    fclose(out);
+
+    printf("\n\nStopping adc\n");
+    if (ads1261_cmd_stop(ads1261_device_0_spi_transfer, &transaction) != GOOD) {
+        fprintf(stderr, "Failed to stop conversions\n");
+        return 1;
+    }
+
+    return 0;
 }
 
 ads1261_error_code_t ads1261_device_0_spi_transfer(ads1261_spi_transaction_record_t * const trans) {
@@ -210,7 +261,7 @@ ads1261_error_code_t base_spi_transfer(int fd, ads1261_spi_transaction_record_t 
         .rx_buf = (uintptr_t)trans->rx,
         .len = (uint32_t)trans->len,
     };
-    if (ioctl(fd, SPI_IOC_MESSAGE(1), &spi_ioc_transfer) < 0) {
+    if (ioctl(fd, SPI_IOC_MESSAGE(1), &spi_ioc_transfer) != spi_ioc_transfer.len) {
         perror("SPI transfer failed");
         return SPI_ERROR;
     }
