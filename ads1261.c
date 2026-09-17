@@ -114,7 +114,7 @@ ads1261_error_code_t ads1261_cmd_stop(ads1261_phyx_transact_ptr spi_dev, ads1261
     return GOOD;
 }
 
-static inline int32_t ads1261_sign_extend_raw_data_read(uint32_t raw_data) {
+int32_t ads1261_sign_extend_raw_data_read(uint32_t raw_data) {
     raw_data &= 0x00FFFFFF;
     // 24 bit raw data -> bit 23 is the sign bit
     if (raw_data & (0b1 << 23)) {

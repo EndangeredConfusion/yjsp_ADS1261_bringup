@@ -5,13 +5,24 @@
 #include <stdlib.h>
 #include <sys/ioctl.h>
 #include <linux/types.h>
+#include <gpiod.h>
+#include <inttypes.h>
 
 #include "ads1261.h"
 #include "cm4_spi_config_utils.h"
 
 #define ADC_SPI_PIPE "/dev/spidev4.0"
 #define SPI_SPEED_HZ (10000000U)
-#define MAX_TRANSACTION_LEN_BYTES 8
+#define SAMPLE_CAPACITY (65536)
+
+typedef struct {
+    uint64_t timestamp_ns;
+    unsigned long edge_seq;
+    uint32_t val;
+} sample_struct_t;
+
+sample_struct_t samples[SAMPLE_CAPACITY];
+size_t count = 0;
 
 static int ADS1261_SPI_DEV_4_DEVICE_0_FD;
 ads1261_error_code_t ads1261_device_0_spi_transfer(ads1261_spi_transaction_record_t * const trans);
@@ -20,6 +31,31 @@ ads1261_error_code_t base_spi_transfer(int fd, ads1261_spi_transaction_record_t 
 
 ads1261_error_code_t print_ads1261_spi_transaction(const ads1261_spi_transaction_record_t * trans);
 
+static struct gpiod_line_request * request_drdy(void) {
+    static unsigned int offset = 22;
+    struct gpiod_chip * chip = gpiod_chip_open("/dev/gpiochip0");
+    if (!chip) {
+        return NULL;
+    }
+    struct gpiod_line_settings *settings = gpiod_line_settings_new();
+    struct gpiod_line_config *config = gpiod_line_config_new();
+    struct gpiod_line_request *request = NULL;
+
+    if (settings && config &&
+        gpiod_line_settings_set_direction(
+            settings, GPIOD_LINE_DIRECTION_INPUT) == 0 &&
+        gpiod_line_settings_set_edge_detection(
+            settings, GPIOD_LINE_EDGE_FALLING) == 0 &&
+        gpiod_line_config_add_line_settings(
+            config, &offset, 1, settings) == 0) {
+        request = gpiod_chip_request_lines(chip, NULL, config);
+            }
+
+    gpiod_line_config_free(config);
+    gpiod_line_settings_free(settings);
+    gpiod_chip_close(chip);
+    return request;
+}
 
 int main(void) {
     ADS1261_SPI_DEV_4_DEVICE_0_FD = open(ADC_SPI_PIPE, O_RDWR);
@@ -111,7 +147,54 @@ int main(void) {
     ads1261_read_reg(ads1261_device_0_spi_transfer, ADS1261_REG_STATUS, &read_sr_val, &read_sr_record);
     print_ads1261_spi_transaction(&read_sr_record);
 
+    struct gpiod_line_request *drdy = request_drdy();
+    if (!drdy) {
+        perror("request GPIO22 DRDY");
+        return 1;
+    }
+
+    struct gpiod_edge_event_buffer *events = gpiod_edge_event_buffer_new(1);
+    if (!events) {
+        perror("allocate GPIO event buffer");
+        gpiod_line_request_release(drdy);
+        return 1;
+    }
+    ads1261_spi_transaction_record_t transaction;
+    printf("\n\nStarting adc\n");
+    if (ads1261_cmd_start(ads1261_device_0_spi_transfer, &transaction) != GOOD) {
+        fprintf(stderr, "Failed to start conversions\n");
+        gpiod_edge_event_buffer_free(events);
+        gpiod_line_request_release(drdy);
+        return 1;
+    }
+
+    while (count < SAMPLE_CAPACITY) {
+        /* Blocks until GPIO22 has a falling edge. */
+        int num_events = gpiod_line_request_read_edge_events(drdy, events, 1);
+        if (num_events < 0) {
+            perror("wait for DRDY");
+            break;
+        }
+        struct gpiod_edge_event *event = gpiod_edge_event_buffer_get_event(events, 0);
+        uint64_t timestamp_ns = gpiod_edge_event_get_timestamp_ns(event);
+        unsigned long seq = gpiod_edge_event_get_line_seqno(event);
+
+        uint32_t raw;
+        if (ads1261_read_cmd_read_data(ads1261_device_0_spi_transfer, &raw, &transaction) != GOOD) {
+            fprintf(stderr, "Failed to read ADC data\n");
+            break;
+        }
+
+        samples[count++] = (sample_struct_t){timestamp_ns, seq, raw};
+    };
+    FILE *out = stdout;
+    fprintf(out, "drdy_ns,edge_seq,raw\n");
+    for (size_t i = 0; i < count; ++i) {
+        fprintf(out, "%" PRIu64 ",%lu,%" PRIu32 "\n",
+                samples[i].timestamp_ns, samples[i].edge_seq, ads1261_decode_voltage(samples[i].val, 2.5, 1));
+    }
     return 0;
+
 }
 
 ads1261_error_code_t ads1261_device_0_spi_transfer(ads1261_spi_transaction_record_t * const trans) {
