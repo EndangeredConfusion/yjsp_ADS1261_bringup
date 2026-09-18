@@ -45,7 +45,7 @@ ads1261_error_code_t ads1261_write_reg(ads1261_phyx_transact_ptr spi_dev, uint8_
     return GOOD;
 }
 
-bool get_input_mux(ads1261_input_mux_t pos, ads1261_input_mux_t neg, uint8_t * res) {
+bool ads1261_get_input_mux(ads1261_input_mux_t pos, ads1261_input_mux_t neg, uint8_t * res) {
     if ((pos > 0xF) || (neg > 0xF)) {
         return false;
     }

@@ -82,7 +82,7 @@ typedef struct {
 
 typedef ads1261_error_code_t (*ads1261_phyx_transact_ptr) (ads1261_spi_transaction_record_t * trans);
 
-bool get_input_mux(ads1261_input_mux_t pos, ads1261_input_mux_t neg, uint8_t * res);
+bool ads1261_get_input_mux(ads1261_input_mux_t pos, ads1261_input_mux_t neg, uint8_t * res);
 
 ads1261_error_code_t ads1261_read_reg(ads1261_phyx_transact_ptr spi_dev, uint8_t reg, uint8_t * value, ads1261_spi_transaction_record_t * trans);
 

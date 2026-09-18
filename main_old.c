@@ -8,7 +8,6 @@
 #include <gpiod.h>
 #include <inttypes.h>
 #include <unistd.h>
-#include <time.h>
 
 #include "ads1261.h"
 #include "cm4_spi_config_utils.h"
@@ -24,12 +23,8 @@ typedef struct {
     uint32_t val;
 } sample_struct_t;
 
-typedef struct {
-    uint8_t mux;
-    sample_struct_t *buffer;
-    size_t capacity;
-    size_t count;
-} ads1261_channel_t;
+sample_struct_t samples[SAMPLE_CAPACITY];
+size_t count = 0;
 
 static int ADS1261_SPI_DEV_4_DEVICE_0_FD;
 ads1261_error_code_t ads1261_device_0_spi_transfer(ads1261_spi_transaction_record_t * const trans);
@@ -104,6 +99,26 @@ int main(void) {
         return 1;
     }
     print_ads1261_spi_transaction(&read_device_id_transaction_record);
+
+    // turn vlven1 on (GPIO24) (output is 24V), with off output is ~4.3V
+    // read V-FB (AIN6)
+    // V-FB ~=~ 10k/(10k + 100k) * OUT = .09*OUT = [0.396, 2.16]
+    // MUX from AIN6 to AINCOM or AIN1 on gain of 1
+    // INPMUX
+    // AIN6 is pump 1
+    // AIN8 is pump 2
+
+    printf("\nSet device to pos AIN6, neg AIN1:\n");
+    uint8_t inpmux = 0;
+    if (!get_input_mux(ADS1261_AIN6, ADS1261_AINCOM, &inpmux)) {
+        perror("Invalid input mux config request.");
+    }
+    ads1261_spi_transaction_record_t mux_write_transaction_record;
+    if (ads1261_write_reg(ads1261_device_0_spi_transfer, ADS1261_REG_INPMUX, inpmux, &mux_write_transaction_record) != GOOD) {
+        perror("Failed to write input mux config");
+        return 1;
+    };
+    print_ads1261_spi_transaction(&mux_write_transaction_record);
 
     printf("\nSet device external gain to passthrough:\n");
     ads1261_spi_transaction_record_t pga_write_transaction_record;
@@ -191,68 +206,14 @@ int main(void) {
         return 1;
     }
 
-    // turn vlven1 on (GPIO24) (output is 24V), with off output is ~4.3V
-    // read V-FB (AIN6)
-    // V-FB ~=~ 10k/(10k + 100k) * OUT = .09*OUT = [0.396, 2.16]
-    // MUX from AIN6 to AINCOM or AIN1 on gain of 1
-    // INPMUX
-    // AIN6 is pump 1
-    // AIN8 is pump 2
-    ads1261_channel_t pump1_channel = {};
-    uint8_t pump1_mux;
-    if (!ads1261_get_input_mux(ADS1261_AIN6, ADS1261_AINCOM, & pump1_mux)) {
-        perror("Failed to get input mux for pump 1");
-        return 1;
-    }
-    pump1_channel.mux = pump1_mux;
-    pump1_channel.capacity = SAMPLE_CAPACITY;
-    pump1_channel.count = 0;
-    sample_struct_t pump1_sample_buffer[SAMPLE_CAPACITY];
-    pump1_channel.buffer = pump1_sample_buffer;
-
-    ads1261_channel_t pump2_channel = {};
-    uint8_t pump2_mux;
-    if (!ads1261_get_input_mux(ADS1261_AIN8, ADS1261_AINCOM, & pump2_mux)) {
-        perror("Failed to get input mux for pump 2");
-        return 1;
-    }
-    pump2_channel.mux = pump2_mux;
-    pump2_channel.capacity = SAMPLE_CAPACITY;
-    pump2_channel.count = 0;
-    sample_struct_t pump2_sample_buffer[SAMPLE_CAPACITY];
-    pump2_channel.buffer = pump2_sample_buffer;
-
-    ads1261_channel_t * const schedule[] = {&pump1_channel, &pump2_channel};
-    const size_t SCHEDULE_LEN = sizeof(schedule) / sizeof(schedule[0]);
-    size_t schedule_index = 0;
-    ads1261_spi_transaction_record_t dummy_record;
-
-    while (1) {
-        ads1261_channel_t * current_channel = schedule[schedule_index];
-        schedule_index = (schedule_index + 1) % SCHEDULE_LEN;
-        if (ads1261_write_reg(ads1261_device_0_spi_transfer, ADS1261_REG_INPMUX, current_channel->mux, &dummy_record) != GOOD) {
-            perror("Failed to write input mux config");
-            return 1;
-        };
-
-        struct timespec ts;
-        if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
-            perror("clock_gettime failed");
-            return 1;
-        }
-        uint64_t mux_done_ns = (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
-        int num_events;
-        struct gpiod_edge_event *event;
-        do {
-            num_events = gpiod_line_request_read_edge_events(drdy, events, 1);
-            event = gpiod_edge_event_buffer_get_event(events, 0);
-        } while (gpiod_edge_event_get_timestamp_ns(event) < mux_done_ns);
+    while (count < SAMPLE_CAPACITY) {
         /* Blocks until GPIO22 has a falling edge. */
+        int num_events = gpiod_line_request_read_edge_events(drdy, events, 1);
         if (num_events < 0) {
-            perror("wait for DRDY failed");
+            perror("wait for DRDY");
             break;
         }
-
+        struct gpiod_edge_event *event = gpiod_edge_event_buffer_get_event(events, 0);
         uint64_t timestamp_ns = gpiod_edge_event_get_timestamp_ns(event);
         unsigned long seq = gpiod_edge_event_get_line_seqno(event);
 
@@ -261,42 +222,25 @@ int main(void) {
             fprintf(stderr, "Failed to read ADC data\n");
             break;
         }
-        if (current_channel->count < current_channel->capacity) {
-            current_channel->buffer[current_channel->count] = (sample_struct_t){timestamp_ns, seq, raw};
-            current_channel->count++;
-        } else {
-            // for this example lets just break when the first one is filled
-            break;
-        }
-    };
-    const char *csv_paths[] = {"../pump1_ain6.csv", "../pump2_ain8.csv"};
-    for (size_t channel_index = 0; channel_index < SCHEDULE_LEN; ++channel_index) {
-        const ads1261_channel_t *channel = schedule[channel_index];
-        const char *path = csv_paths[channel_index];
-        FILE *out = fopen(path, "w");
-        if (out == NULL) {
-            perror(path);
-            return 1;
-        }
 
-        int write_error = fprintf(out, "drdy_ns,edge_seq,voltage_V\n") < 0;
-        for (size_t i = 0; i < channel->count && !write_error; ++i) {
-            const sample_struct_t *sample = &channel->buffer[i];
-            write_error = fprintf(out, "%" PRIu64 ",%lu,%.9f\n",
-                                  sample->timestamp_ns,
-                                  sample->edge_seq,
-                                  ads1261_decode_voltage(sample->val, 2.5, 1)) < 0;
-        }
-        if (write_error) {
-            perror(path);
-            fclose(out);
-            return 1;
-        }
-        if (fclose(out) != 0) {
-            perror(path);
-            return 1;
-        }
+        samples[count++] = (sample_struct_t){timestamp_ns, seq, raw};
+    };
+    // FILE *out = stdout;
+    FILE * out = fopen("../output.csv", "w");
+    if (out == NULL) {
+        printf("Error: Could not open or create the file!\n");
+        return 1; // Exit the program with an error code
     }
+
+    fprintf(out, "drdy_ns,edge_seq,voltage_V\n");
+    for (size_t i = 0; i < count; ++i) {
+        fprintf(out, "%" PRIu64 ",%lu,%.9f\n",
+                samples[i].timestamp_ns,
+                samples[i].edge_seq,
+                ads1261_decode_voltage(samples[i].val, 2.5, 1));
+    }
+
+    fclose(out);
 
     printf("\n\nStopping adc\n");
     if (ads1261_cmd_stop(ads1261_device_0_spi_transfer, &transaction) != GOOD) {
